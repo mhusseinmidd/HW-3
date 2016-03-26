@@ -1,0 +1,529 @@
+---
+title: "MATH 216 Homework 2"
+author: "Mohamed Hussein"
+output: html_document
+---
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(plyr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(foreign))
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(tidyr))
+suppressPackageStartupMessages(library(plotly))
+suppressPackageStartupMessages(library(pander))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(stringi))
+```
+
+## Admistrative:
+
+Please indicate
+
+* Who you collaborated with: Christian L. 
+* Roughly how much time you spent on this HW: 8 Hrs 
+* What gave you the most trouble:
+* Any comments you have: 
+
+
+## Question 1:
+
+Question 4 on page 76 from Chapter 4 of Data Analysis Using Regression and
+Multilevel/Hierarchical Models.  The codebook can be found
+[here](http://www.stat.columbia.edu/~gelman/arm/examples/pollution/pollution.txt).
+I've included R code blocks for each question, but use them only if you feel it
+necessary.
+
+```{r, echo=FALSE, cache=TRUE, warning=FALSE}
+# DO NOT EDIT THIS SECTION!
+url <- "http://www.stat.columbia.edu/~gelman/arm/examples/pollution/pollution.dta"
+pollution <- read.dta(url) %>% 
+  tbl_df()
+```
+
+###a)
+*Create a scatterplot of mortality rate versus level of nitric oxides. Do you think linear regression will fit these data well? Fit the regression and evaluate residual plot from the regression.
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+ggplot(data=pollution, aes(x = nox, y = mort))+
+  geom_point() +
+  ggtitle("Mortaility vs. Nitric Oxide Levels") +
+  xlab("Relative Nitric Oxide Pollution Potential") +
+  ylab("Total Age-adjusted Mortality Rate per 100,000") + 
+  theme(plot.title = element_text(lineheight=.8, face="bold")) + 
+  theme(axis.title.y=element_text(margin=margin(0,12,0,0)))
+```
+
+At a cursory glance, it appears that a linear model would not fit these data well, since the majority of points are constrained below 100 and display a non-linear relationship in how 
+they increase. Adding a linear regression line, we get: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+ggplot(data=pollution, aes(x = nox, y = mort))+
+      geom_point() +
+      ggtitle("Mortaility vs. Nitric Oxide Levels") +
+      xlab("Relative Nitric Oxide Pollution Potential") +
+      ylab("Total Age-adjusted Mortality Rate per 100,000") + 
+      theme(plot.title = element_text(lineheight=.8, face="bold")) + 
+      theme(axis.title.y=element_text(margin=margin(0,12,0,0))) + 
+      geom_smooth(method="lm", fullrange=TRUE) 
+```
+
+Indeed, adding a linear regression line through the data shows how poorly a linear
+model can predict the mortality rates given different Nitric Oxide pollution levels.
+To assess more rigirously the accuracy of our intuition regarding how bad a linear model 
+explains the data, we plot a residuals graph: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+model1a.1  <- 
+  lm(mort~nox, data=pollution)
+
+residuals1a.1 <- 
+  resid(model1a.1)
+
+ggplot(data=pollution, aes(x = nox, y = residuals1a.1))+
+      geom_point()+
+      theme(plot.title = element_text(lineheight=.8, face="bold")) + 
+      ggtitle("Residuals vs. Nitric Oxide Levels") +
+      xlab("Relative Nitric Oxide Pollution Potential") +
+      ylab("Residuals")+ 
+      geom_hline(yintercept=0, color="red")
+```
+
+This residuals graph confirms our intuition. Despite showing residuals centered 
+around zero, the graph depicts a non-constant variance (demonstrated by seeing a 
+pattern in the dispersion of the points), thereby indicating that a linear model 
+is a poor fit for the data at hand. 
+
+###b)
+*Find an appropriate transformation that will result in data more appropriate for linear regression. Fit a regression to the transformed data and evaluatethe new residual plot: 
+
+The transformation we consider is the log of the Nirtic Oxide levels. 
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+pollution <- 
+            pollution %>% 
+            mutate(log_nox=log(nox))
+
+  ggplot(data=pollution, aes(x=log_nox, y=mort)) +
+        geom_jitter() +
+        ggtitle("Mortaility vs. Logged Nitric Oxide Levels") +
+        xlab("Log of Relative Nitric Oxide Pollution Potential") +
+        ylab("Total Age-adjusted Mortality Rate per 100,000") + 
+        theme(plot.title = element_text(lineheight=.8, face="bold")) + 
+        theme(axis.title.y=element_text(size=9, margin=margin(0,12,0,0)))+
+        theme(axis.title.x=element_text(size=9))+
+        geom_smooth(method="lm", fullrange=TRUE)
+
+model1b.1  <- 
+              lm(mort~log_nox, data=pollution)
+residuals1b.1 <- 
+                resid(model1b.1)
+
+graph1b.1 <- 
+              ggplot(data=pollution, aes(x = log_nox, y = residuals1b.1))+
+              geom_point()+ 
+              ggtitle("Residuals vs. Logged Nitric Oxide Levels") +
+              xlab("Logged Relative Nitric Oxide Pollution Potential") +
+              ylab("Residuals")
+graph1b.1 <- 
+              graph1b.1 + geom_hline(yintercept=0, color="red")
+graph1b.1
+
+```
+
+The resulting residual graph shows an improvement over the previous one. Not only 
+are the residuals centered around zero, as was the case in the previous graph, but 
+we also see a random dispersion of residuals, suggesting a constant 
+variance.This implies that our second model fits the data relatively better than
+a simple linear model. 
+
+
+###c)
+*Interpret the slope coefficient from the model you chose in (b).
+
+The first table presents the regression results, while the second table shows
+the confidence intervals. 
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+log_model  <- lm(mort~log_nox, data=pollution)
+panderOptions("digits", 3)
+pander(log_model, covariate.labels = ('Logged Nitrogin Oxide'))
+```
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+ci_log_model <- confint(log_model)
+row.names(ci_log_model) <- c("Intercept", "Logged Nitrogen Oxide")
+pander(ci_log_model)
+```
+
+An intuitive way of interpreting the results of this model is to differenciate 
+the model with respect to the Nitric Oxide. Thus, a one perecent increase 
+in Nitric Oxide levels is associated with a 0.15 increase in the age-adjusted 
+total mortality rate per 100,000. We are 95% confident that the effect lies between
+0.213 and 0.285 increases in mortailities per 100,000 adjusted for age (Of course, if we say a one UNIT change in the levels of Nitric Oxide levels, then the associated change in mortality rates is about 15.3). 
+
+###d)
+*Now fit a model predicting mortality rate using levels of nitric oxides, sulfur dioxide, and hydrocarbons as inputs. Use appropriate transformations when helpful. Plot the fitted regression model and interpret the coefficients.
+
+First, let's examine the relationship between the two new covariates and the 
+mortality rate: 
+```{r echo=FALSE, out.width=c('450px', '450px'), fig.show='hold', warning=FALSE}
+ggplot(data=pollution, aes(x=hc, y=mort)) + geom_jitter()
+ggplot(data=pollution, aes(x=so2, y=mort)) + geom_jitter()
+```
+
+
+A quick look at the graphs, which display the relationship between the two additional
+covariates and our outcome variable, suggests that there exists a non-linear 
+relationship between our two new dependent variables and our outcome variable that is best approximated by a log transformation. 
+
+Next, we construct a new model that takes into account the logged values of Sulfur 
+Dioxide and Hydrocarbons. From this new model we see that a one one perecent increase in Nitric Oxide levels is associated with a 0.58 increase in the age-adjusted total mortality rate per 100,000, controlling forlevels of sulphur dioxide and hydrocarbon (Again, if we were changing the Nitric Oxide by one unit, the associated increase in motality would be 58).  
+
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+pollution <- 
+             pollution %>% 
+             mutate(log_hc=log(hc)) %>% 
+             mutate(log_so2=log(so2))
+
+log_model2  <- 
+              lm(mort~log_nox + log_hc + log_so2, data=pollution)
+
+pander(log_model2, covariate.labels = (c('Logged Nitrogin Oxide', 
+                                         'Logged Hydrocarbons', 
+                                         'Logged Sulfur Dioxide')))
+
+ci_log_model2 <- confint(log_model2)
+row.names(ci_log_model2) <- c("Intercept", 
+                              "Logged Nitrogen Oxide",
+                              'Logged Hydrocarbons',
+                              'Logged Sulfur Dioxide')
+pander(ci_log_model2)
+```
+
+### e)
+*Cross-validate: fit the model you chose above to the first half of the data and
+then predict for the second half. (You used all the data to construct the mode
+in (d), so this is not really cross-validation, but it gives a sense of how the
+steps of cross-validation can be implemented.)
+
+To answer this question, let's follow thw Monte Carlo cross-validation technique:
+In a nutshell, what we will do imagine that our 'pollution' dataset is the population, 
+all the data in the world that relates pollutants to mortality rates. Then, we 
+will partition our sample into two complementary and mutually exclusive subsamples. 
+We then compare the predicted values obtained from the test dataset to the actual 
+mortality values in the train dataset. If our model is accurate, we would expect, on 
+average for the points to lie on a 45 degree line. 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+#First, partition the dataset into two complementary and mutually exclusive subsets:
+splitdf <- function(dataframe, seed=NULL) {
+    if (!is.null(seed)) set.seed(seed)
+    index <- 1:nrow(dataframe)
+    trainindex <- sample(index, trunc(length(index)/2))
+    trainset <- dataframe[trainindex, ]
+    testset <- dataframe[-trainindex, ]
+    list(trainset=trainset,testset=testset)
+}
+
+partitions <- splitdf(dataframe=pollution)
+train <- partitions$trainset
+test <- partitions$testset
+
+#Second, define the model using the train dataset: 
+log_model3  <- 
+              lm(mort~log_nox + log_hc + log_so2, data=train)
+
+#Third, predict the outcome of the testing data, using the model above:
+predicted <- predict(log_model3, newdata=test[ ,-1])
+
+#Plot the true values of mort vs. the predicted values using the testing data: 
+ggplot (train, aes(x=predicted, y=mort)) + 
+  geom_point()+ 
+  geom_abline(intercept = 0, slope = 1, color="red")+ 
+  labs(main="True vs. Fitted Values of Mortality", 
+      x="Predicted Values", y="Actual Mortality Rates")
+
+# #Finally, find out exactly what proportion of test is explained by model (R^2):  
+# actual <- test$log_nox
+# rsq <- 1-sum((actual-predicted)^2)/sum((actual-mean(actual))^2)
+# print(rsq)
+# #This value is too big. R^2 is supposed to be a proportion between -1 and 1, no? 
+```
+From this graph, it seems that our model is not good at predicting the actual 
+mortality rates. To quantify how 'bad' are our model is at making predictions, 
+we could calculate the R^2 values. 
+
+### f) 
+*What do you think are the reasons for using cross-validation?
+
+Cross-validation tests the efficacy of a model by using a subset of the
+available dataset to fit the model, then testing its ability to predict using the
+the remainder of the dataset. This technique is preferable to evaluating 
+residuals as it demonstrates how well a model will do when facing 'new data.' In short, having a model without knowing how 'accurately' it can predict new data is not very useful, cross-validation gives us an idea of how well (or not) our model will be able to predict new data. 
+
+
+## Question 2:
+
+Perform an Exploratory Data Analysis (EDA) of the OkCupid data, keeping in mind 
+in HW-3, you will be fitting a logistic regression to predict gender. What do I mean by
+EDA?
+
+* Visualizations
+* Tables
+* Numerical summaries
+
+```{r, echo=FALSE, cache=TRUE, warning=FALSE}
+# DO NOT EDIT THIS SECTION!
+profiles <- read.csv("profiles.csv", header=TRUE) %>% tbl_df()
+set.seed(76)
+essays <- select(profiles, contains("essay"))
+profiles <- select(profiles, -contains("essay"))
+```
+
+The big question we are trying to answer in this section is: Who is in our sample? First, let's explore our sample's basic demographics: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+con_var <- 
+           profiles %>% 
+           group_by(sex) %>% 
+           mutate (
+                    age_Mean=mean(age, na.rm=TRUE), 
+                    age_Sd=sd(age), 
+                    height_Mean=mean(height, na.rm=TRUE), 
+                    height_Sd=sd(height, na.rm=TRUE),  
+                    income_Mean=mean(ifelse(income>0, income,NA),na.rm=TRUE),
+                    income_Sd=sd(ifelse(income>0, income,NA),na.rm=TRUE)
+           ) %>%  
+          select(sex, age_Mean:income_Sd) %>% 
+          slice(which.max(age_Mean)) %>%  #We only need one entry per variable per sex
+          gather("Stat1", "Value", 2:7) %>%
+          separate (Stat1, c("demographic", "stat"), sep="_") %>% 
+          spread(demographic, Value) 
+                   
+kable(con_var[,c(1:5)], 
+      format = "markdown",
+      caption="Basic Demographics of Okcupid Bay Area Users", 
+      col.names=c("Sex", "Statistic", "Age", "Height", "Income"),  
+      digits=c(2, 2, 2, 2, 2))
+```
+
+
+This table reports the mean and standard deviation of Okcupid users' age, height, and income by sex. In our sample, the average age of male Okcupid user in the Bay Area is 32, while the female average age is 33. As expected, male users are taller on average by about five inches. Men also tend to have higher reported income, $110,000 compared to $81,000 reported by females. It is important to stress that we are unable to verify the accuracy of these reported incomes. Thus, it may very well be that males, on average, tend to inflate their incomes. 
+
+Another important variable to consider is education. However, there appears to be too many categories available for Okcupid users to choose from. This may potentially kill any variation in our subsequent regression analysis. An easy fix is to consolodate some of the categories, in an arbitrary but reasonable way. We use the US Census education category as a guiding principle to produce four categories: Some College, Bachelor's, Graduate or Professional Degrees, and Space Camp. While space camp may not be a serious measure of education, we choose to include it as a variable of interest, since this user's choice may reveal important charactaritsics about who they are (e.g. an embarressment of a low level of education or humor), which may aid us predict their sex later on. 
+
+On average, there are more male users of Okcupid with the same level of education compared to females. Our sample contains, for example, almost 1500 male users with a bachelor's compared to only 1000 female users. This could be a function of the mere number of males, which is more than the number of females in our sample in absolute terms. Hence, we look at the proportion of users with a given level of education relative to the overall number of their sex. 
+
+```{r, warning=FALSE, echo=FALSE}
+#It would have been great to define a function that gets the proportion of a
+#variable broken down by another variable: 
+
+# tally.by<- function(dataframe, totally, tallyby) {
+#                         dataframe %>% 
+#                         group_by(tallyby) %>% 
+#                         tally () %>% 
+#                         rename (total_tallyby=n)
+#                   
+#                         dataframe %>%  
+#                         group_by(tallyby, totally) %>% 
+#                         tally () %>% 
+#                         mutate (PE_totally=n/total_tallyby)
+# }
+
+#Any idea why this is not working? 
+
+#tally.by(dataframe=con_var, totally=education, tallyby=sex)
+```
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+con_var <-  
+              profiles %>% 
+              filter (education!="") %>% 
+              select (sex, education) %>% 
+              mutate (education=
+                      revalue(education, c("dropped out of law school"=
+                                             "Bachelor's",
+                                           "dropped out of masters program"=
+                                             "Bachelor's", 
+                                           "dropped out of med school"=
+                                             "Bachelor's",
+                                           "dropped out of ph.d program"=
+                                             "Bachelor's", 
+                                           "graduated from college/university"=
+                                             "Bachelor's", 
+                                           "college/university"=
+                                             "Bachelor's", 
+                                           "graduated from law school"=
+                                             "Graduate or Professional Degree", 
+                                           "graduated from masters program"=
+                                             "Graduate or Professional Degree",
+                                           "graduated from med school"=
+                                             "Graduate or Professional Degree", 
+                                           "graduated from ph.d program"=
+                                             "Graduate or Professional Degree", 
+                                           "law school"=
+                                              "Graduate or Professional Degree", 
+                                           "masters program" =
+                                              "Graduate or Professional Degree", 
+                                           "med school" = 
+                                             "Graduate or Professional Degree", 
+                                           "ph.d program"= 
+                                             "Graduate or Professional Degree", 
+                                           "working on masters program" = 
+                                              "Graduate or Professional Degree",
+                                           "working on ph.d program" = 
+                                             "Graduate or Professional Degree",
+                                           "working on med school" = 
+                                             "Graduate or Professional Degree",
+                                           "working on law school" = 
+                                             "Graduate or Professional Degree",
+                                           "working on college/university"= 
+                                             "Some College", 
+                                           "graduated from two-year college"=
+                                             "Some College", 
+                                           "dropped out of college/university"=
+                                             "Some College", 
+                                           "working on two-year college"=
+                                             "Some College", 
+                                           "two-year college" = 
+                                              "Some College", 
+                                           "dropped out of two-year college"=
+                                             "Some College", 
+                                           "graduated from high school"=
+                                             "High School", 
+                                           "high school"=
+                                             "High School", 
+                                            "dropped out of high school"=
+                                             "High School", 
+                                           "working on high school"=
+                                             "High School",
+                                           "graduated from space camp"=
+                                             "Space Camp", 
+                                           "working on space camp"=
+                                             "Space Camp", 
+                                           "dropped out of space camp"=
+                                             "Space Camp", 
+                                           "space camp"=
+                                             "Space Camp"
+                                  )
+                                           
+                      )
+              )
+                
+education_tally1 <- con_var %>% group_by(sex) %>% tally () %>% 
+  rename (total_sex=n)
+
+education_tally <- con_var %>% group_by(sex, education) %>% tally () %>% 
+  mutate (PE=(n/education_tally1$total_sex)*100)
+
+ggplot(education_tally, 
+       aes(x = reorder(education, -PE), y = PE, color = sex)) +
+  geom_point() +
+  labs(title = "Education of Bay Area Okcupid Users", 
+       x = "Education Level", y = "Users (%)") + 
+  theme(axis.text.x=element_text(size=10, angle = -15, hjust = 0))  +
+  scale_color_manual("Sex",labels = c("Female", "Male"), 
+                     values = c("red", "blue"))
+```
+
+Interestingly, this does not seem to be the case. male users are on average more educated than female users of Okcpuid, not by virtue of being more in quantity.  
+
+Next, we consider the body types and marital status of Bay Area Okcupid users: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+body_type <- 
+             profiles %>% 
+             select(body_type, sex) %>% 
+             filter(body_type!="") %>%  
+             filter(body_type!="rather not say") %>%  
+             group_by(sex, body_type) %>%
+             tally() %>% 
+             arrange(desc(n)) %>% 
+             mutate (PE=(n/education_tally1$total_sex)*100)
+
+ggplot(body_type, aes(x = reorder(body_type, -PE), y = PE, color = sex)) +
+        geom_point() +
+        labs(title = "Body Types of Bay Area Okcupid Users", 
+             x = "Body Type", y = "Users (%)") + 
+        theme(axis.text.x=element_text(angle = -90, hjust = 0)) +
+        scale_color_manual("Sex",labels = c("Female", "Male"), 
+                           values = c("red", "blue"))
+```
+
+As expected, certain adjectives are used more frequently by women than men, for instance, curvy and full-figured. Conversly, men tend to use the ajectives atheltic and fit more than women. 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, Warning=FALSE}
+mstatus_tally <-  profiles %>% 
+                  select(status, sex) %>% 
+                  filter(status!="unknown") %>% 
+                  group_by(sex) %>% tally () %>% 
+                  rename (total_sex=n)
+
+mstatus <- 
+          profiles %>% 
+          select(status, sex) %>% 
+          filter(status!="unknown") %>%  
+          mutate (status=
+                      revalue(status, c("seeing someone"=
+                                             "In a Relationship",
+                                        "married"=
+                                             "In a Relationship", 
+                                        "available"=
+                                          "single")
+                              )
+                  )%>%
+          group_by(status, sex) %>% 
+          tally() %>% 
+          mutate (PE=n/mstatus_tally$total_sex)
+
+
+ggplot(mstatus, aes(x = sex, y = PE, fill = status)) +
+    geom_bar(stat = "identity") +
+    labs(title = "Marital Status of Bay Area Okcupid Users", 
+         x = "Sex", y = "Users(%)")
+```
+Unsurprisingly, the majority of users on the website indicate that they are single or available. However, there are users who are married or are currently seeing someone still active on Okcupid. While there tend to be more single men, the proportion of men and women who are active users of Okcupid but are in a relationship appears to be about the same. 
+
+Now that we know a bit about user's basic demographics and love-life-related 
+variables, we turn to their social habits: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+soc_beh <-  
+            profiles %>% 
+            filter (smokes!="") %>%
+            filter (drugs!="") %>% 
+            filter (drinks!="") %>% 
+            select (sex, smokes, drugs, drinks) %>% 
+            mutate (smokes=
+                      revalue(smokes, c("sometimes"= "Yes","trying to quit"= "Yes", 
+                              "when drinking"= "Yes", "yes"= "Yes", "no"="No")
+                              ), 
+                    drugs=
+                      revalue(drugs, c("never"="No", "often"="Yes",
+                                     "sometimes"="Yes")
+                              ), 
+                    drinks=
+                     revalue(drinks, c("not at all"="No", "rarely"="No", 
+                                       "desperately"="Yes", "often"="Yes", 
+                                       "socially"="Yes", "very often"="Yes"
+                                       )
+                              )
+            ) %>% 
+            gather("behavior", "yes", 2:4) %>% 
+            group_by(sex, behavior, yes) %>% 
+            tally() %>% 
+            rename (frequency=n) %>% 
+            mutate (Percentage=(frequency/education_tally1$total_sex)*100)
+
+            
+gx <- 
+      ggplot(data=soc_beh, aes(x=sex, y=Percentage, fill=yes))+
+      geom_bar(stat = "identity", linetype="solid") +
+      labs(title = "Risky Social Behavior of Bay Area Okcupid Users", 
+          x = "Social Behavior", y = "Users (%)")
+gx <- gx + facet_wrap(~behavior)
+gx
+```
+Finally, we see that there is a higher proportion of men engaging in 'risky' social behavior 
+such as drinking, smoking, or doing drugs. 
