@@ -1,6 +1,6 @@
 ---
 title: "MATH 216 Homework 3"
-author: "WRITE YOUR NAME HERE"
+author: "Mohamed Hussein"
 output: html_document
 ---
 
@@ -9,6 +9,11 @@ suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(lubridate))
 suppressPackageStartupMessages(library(Quandl))
+suppressPackageStartupMessages(library(plotly))
+suppressPackageStartupMessages(library(pander))
+suppressPackageStartupMessages(library(plyr))
+suppressPackageStartupMessages(library(knitr))
+
 ```
 
 
@@ -16,10 +21,13 @@ suppressPackageStartupMessages(library(Quandl))
 
 Please indicate
 
-* Who you collaborated with:
-* Roughly how much time you spent on this HW:
-* What gave you the most trouble:
-* Any comments you have: 
+* Who you collaborated with: None
+* Roughly how much time you spent on this HW: 5 Hours
+* What gave you the most trouble: Question 1
+* Any comments you have: Question 1 is in a very crude state as it currently stand. 
+Would love to discuss the concepts related to machine learning in class. In 
+addition, what are the statistical implications for losing a considerable chunk 
+of the dataset as a result of the variables chosen and how thresholds are chosen. 
 
 
 ## Data
@@ -33,12 +41,18 @@ jukebox from Nov 30, 2003 to Jan 22, 2009 (included in `HW-3` folder).
 # DO NOT EDIT THIS SECTION!
 profiles <- read.csv("data/profiles.csv", header=TRUE) %>% 
   tbl_df()
+
+essays <- select(profiles, contains("essay"))
+profiles <- select(profiles, -contains("essay"))
+
 jukebox <- read.csv("data/jukebox.csv", header=TRUE) %>% 
   tbl_df()
+
+bitcoin <-  Quandl("BAVERAGE/USD") %>% tbl_df()
+
+gold<- Quandl("WGC/GOLD_DAILY_USD", start_date="2010-07-17") %>% 
+  tbl_df()
 ```
-
-
-
 
 
 ## Question 1:
@@ -52,20 +66,174 @@ specifically the OkCupid dataset.
 Using your exploratory data analysis from HW-2, fit a logistic regression to
 predict individual's gender and interpret your results.
 
-```{r, echo=FALSE, fig.width=12, fig.height=6}
+```{r, echo=FALSE, warning=FALSE, fig.width=12, fig.height=6}
+#Prep variables: 
+profiles <- 
+  profiles %>% 
+  filter (income!=-1) %>%
+  filter(body_type!="rather not say") %>% 
+  filter(body_type!="") %>%  
+  filter (smokes!="") %>%
+  filter (drugs!="") %>% 
+  filter (drinks!="") %>% 
+  mutate (is_female = ifelse(sex=="f", 1, 0), 
+          log_income=log(income), 
+          education=
+            revalue(education, c("dropped out of law school"=
+                                   "Bachelor's",
+                                 "dropped out of masters program"=
+                                   "Bachelor's", 
+                                 "dropped out of med school"=
+                                   "Bachelor's",
+                                 "dropped out of ph.d program"=
+                                   "Bachelor's", 
+                                 "graduated from college/university"=
+                                   "Bachelor's", 
+                                 "college/university"=
+                                   "Bachelor's", 
+                                 "graduated from law school"=
+                                   "Graduate or Professional Degree", 
+                                 "graduated from masters program"=
+                                   "Graduate or Professional Degree",
+                                 "graduated from med school"=
+                                   "Graduate or Professional Degree", 
+                                 "graduated from ph.d program"=
+                                   "Graduate or Professional Degree", 
+                                 "law school"=
+                                   "Graduate or Professional Degree", 
+                                 "masters program" =
+                                   "Graduate or Professional Degree", 
+                                 "med school" = 
+                                   "Graduate or Professional Degree", 
+                                 "ph.d program"= 
+                                   "Graduate or Professional Degree", 
+                                 "working on masters program" = 
+                                   "Graduate or Professional Degree",
+                                 "working on ph.d program" = 
+                                   "Graduate or Professional Degree",
+                                 "working on med school" = 
+                                   "Graduate or Professional Degree",
+                                 "working on law school" = 
+                                   "Graduate or Professional Degree",
+                                 "working on college/university"= 
+                                   "Some College", 
+                                 "graduated from two-year college"=
+                                   "Some College", 
+                                 "dropped out of college/university"=
+                                   "Some College", 
+                                 "working on two-year college"=
+                                   "Some College", 
+                                 "two-year college" = 
+                                   "Some College", 
+                                 "dropped out of two-year college"=
+                                   "Some College", 
+                                 "graduated from high school"=
+                                   "High School", 
+                                 "high school"=
+                                   "High School", 
+                                 "dropped out of high school"=
+                                   "High School", 
+                                 "working on high school"=
+                                   "High School",
+                                 "graduated from space camp"=
+                                   "Space Camp", 
+                                 "working on space camp"=
+                                   "Space Camp", 
+                                 "dropped out of space camp"=
+                                   "Space Camp", 
+                                 "space camp"=
+                                   "Space Camp")
+                    ), 
+          status=
+            revalue(status, c("seeing someone"=
+                                "In a Relationship",
+                              "married"=
+                                "In a Relationship", 
+                              "available"=
+                                "single")
+                    ), 
+          smokes=
+          revalue(smokes, c("sometimes"= "Yes","trying to quit"= "Yes", 
+                            "when drinking"= "Yes", "yes"= "Yes", "no"="No"
+                            )
+                  ), 
+          drugs=
+          revalue(drugs, c("never"="No", "often"="Yes",
+                           "sometimes"="Yes"
+                           )
+                  ),
+          drinks=
+          revalue(drinks, c("not at all"="No", "rarely"="No", 
+                            "desperately"="Yes", "often"="Yes", 
+                            "socially"="Yes", "very often"="Yes"
+                            )
+                  )
+          )
+#Now that our variables are cleaned, we create our regression model. We have 
+# multi-levelled categorical variables, so we use the model matrix option: 
+# model1 <- model.matrix(sex~age+
+#                          height+
+#                          log_income+
+#                          education+
+#                          body_type+
+#                          status+
+#                          smokes+
+#                          drugs+
+#                          drinks, 
+#                        data=profiles, family=binomial)
+# 
+# model1 <- data.frame(model1)
+#This is NOT working, so we use brute force: 
 
+profiles <- 
+  profiles %>%  
+  mutate (smc=ifelse(education=="Some College", 1,0), 
+          grad=ifelse(education=="Graduate or Professional Degree", 1,0),
+          spc=ifelse(education=="Space Camp", 1,0),
+          ath=ifelse(body_type=="athletic", 1,0), 
+          cur=ifelse(body_type=="curvy", 1,0), 
+          fit=ifelse(body_type=="fit", 1,0),
+          ff=ifelse(body_type=="full figured", 1,0), 
+          smokes=ifelse(smokes=="Yes", 1,0), 
+          drinks=ifelse(drinks=="Yes", 1,0), 
+          drugs=ifelse(drugs=="Yes", 1,0), 
+          is_female=ifelse(sex=="f", 1,0)
+  ) %>% 
+  select (is_female, age, smc, grad, spc, ath, cur, fit, ff, smokes, drinks, 
+          drugs, age, height, log_income)
+
+logistic_model <- 
+  glm(is_female ~ age + smc + grad + spc + ath + cur + fit + ff + smokes 
+                      + drinks + drugs + height + log_income, family=binomial(), profiles)
+
+panderOptions("digits", 3)
+pander (logistic_model, covariate.labels =c("Age", 'Some College', 
+                                            'Graduate/ Professional Degree',
+                                            'Space Camp', 'Atheltic', 'Curvey', 
+                                            'Fit', 'Full Figured', 'Smokes',
+                                            'Drinks', 'Does Drugs', 'Height', 
+                                            'Logged Income'))
 ```
 
+The results of our regression model show that age is a statistically significant predictor of sex. A one year increase in age, on average, is associated with a 1.021 increase in the odds of being female. Conversely, having only some college education, compared to having a Bachelor's, decreases the odds of being female by 0.802. Ideally. we would be able to see the condifence interval for these predictions, but the code breaks down. 
+
+```{r, echo=FALSE, warning=FALSE, fig.width=12, fig.height=6}
+# Have to fix this somehow ... 
+# ci_logistic_model <-confint (logistic_model)
+# pander (ci_logistic_model)
+```
 
 ### b)
 
 Plot a histogram of the fitted probabilities $\widehat{p}_i$ for all users $i=1,
 \ldots, n=59946$ in your dataset.
 
-```{r, echo=FALSE, fig.width=12, fig.height=6}
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+profiles <- profiles %>% 
+            mutate (fitted_probability=fitted(logistic_model))
 
+hist(fitted(logistic_model))
 ```
-
 
 ### c)
 
@@ -79,8 +247,32 @@ Display a 2 x 2 contigency table of `sex` and `predicted_sex` i.e. compare the
 predicted sex to the actual sex of all users. The sum of all the elements in
 your table should be $n=59946$. Comment on how well our predictions fared.
 
+The contingency table below displays predicted and actual sexes of Okcupid users in the Bay Area. Overall, our model seems to have fared quite well. Of the 6,742  males in our sample, we were able to predict accuratley the sex of 6,043. That is, our model correctly predicted the gender of males 90% of the time. As for females, the model predicted correctly their sex 83.7% of the time. Combined, our model made correct predictions 88.3% of the time regarding an Okcupid user's sex. 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
+profiles <- profiles %>% 
+  mutate (predicted_sex_logodds=predict(logistic_model), 
+          
+          #Find the odds: 
+          
+          predicted_sex_odds=exp(predicted_sex_logodds), 
+          
+          #Now, convert to probability: 
+          
+          predicted_sex_prob=predicted_sex_odds/(1+predicted_sex_odds), 
+          
+          #We have the probability that someone is female based on our model. Now, we incorporate the threshold: 
+          
+          predicted_sex=ifelse(predicted_sex_prob>=0.5, 1, 0)
+          )
 
+profiles$is_female <- factor(profiles$is_female, levels = c(0, 1),
+labels = c("Male", "Female"))
+
+colnames <- c("Predicted Male", "Predicted Female")
+#We can compare actual sex to predicted sex: 
+compare <- table(profiles$is_female, profiles$predicted_sex)
+kable (compare, col.names=colnames
+       )
 ```
 
 
@@ -90,13 +282,9 @@ Say we wanted to have a **false positive rate** of about 20%, i.e. of the people
 we predicted to be female, we want to be wrong no more than 20% of the time. What
 decision threshold $p^*$ should we use?
 
+False positive refers to instances of falsely rejecting the null hypothesis. In this case, it refers to predicting that a user is female when in fact they are male. As it currently stands, the model has a false positive rate of 17.3% only. In general, however, if we wanted to adjust a threshold tp get such a rate, I have no idea what we should do ... (need to think more about this) 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
-
 ```
-
-
-
-
 
 ## Question 2:
 
@@ -110,12 +298,29 @@ mean anything to most people).
 What seasonal (i.e. cyclical) patterns do you observe?
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
+jukebox <- read.csv("data/jukebox.csv", header=TRUE) %>% 
+  tbl_df()
 
+time_series <- 
+  jukebox %>%  
+  mutate (date_fixed=parse_date_time(date_time, '%m %d %h:%m:%s %y'), 
+          week=floor_date(date_fixed, "week")
+  ) %>% 
+group_by(week) %>% 
+  tally()
+
+ggplot(time_series, aes(x=week, y=n)) + 
+  geom_line() + 
+  labs(x="Week of Year", 
+      y="Total Number of Played Songs",
+      title="Number of Played Songs per Week")
 ```
 
-
-
-
+Looking at the graph, it seems that the beginning and end of every year witnesses
+a considerable increase in the total number of songs played per week at Reed's 
+college. This pattern is expected, since there are presuemably fewer students 
+in the summer and during winter break, when the number of songs played is lowest, 
+compared to the academic year which spans from September to May.   
 
 ## Question 3:
 
@@ -126,12 +331,25 @@ shift" during the academic year? Define
 * the academic year as September through May (inclusive)
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
+graveyard <- 
+  jukebox %>% 
+  mutate (date_fixed=parse_date_time(date_time, '%m %d %h:%m:%s %y')) %>% 
+  filter(month(date_fixed)>=05 & month(date_fixed)<=09) %>% 
+  filter (hour(date_fixed)>=00 & hour(date_fixed)<=08) %>%  
+  group_by(artist) %>% 
+  tally() %>%
+  arrange (desc(n)) %>% 
+  slice (1:10)
 
+pander(graveyard)
 ```
 
-
-
-
+The top artist played at Reed college's pool hall on the jukebox 
+between 2004 and 2009 is OutKast. The hip-hop duo beats its closest contester
+The Beatles by a considerable margin of 149. The Beatles, in turn, was played 
+132 times more than Radiohead, who came in third place, overtaking Led Zeppelin
+by merely 10 times. Eminem, who took the tenth place, can perhaps learn a lesson 
+or two from OutKast, who were played 463 times more than the contemporary rapper. 
 
 ## Question 4:
 
@@ -144,13 +362,36 @@ Let our measure of volatility be the relative change from day-to-day in price.
 Let the reference currency be US dollars. Analyze these results and provide
 insight to a foreign currency exchanger.
 
+A visual comparison between the prices of bitcoin and gold relative to the US 
+dollar shows that, in the long term, gold is characterized by mild fluctuations. 
+More specifically, the amplitude of the volatity of gold is around 417 USD.
+Bitcoin, on the other hand, seems to possess a maximum displacement of 600 USD, 
+making it more volatile than gold over all. This large difference of almost 200 USD
+is driven in part by a drastic spike in the value of Bitcoins in the week of 
+29-11-2013, when its media presence was strong, as evident by references in 
+articles in CNN Money, Wall Street Journal, and Bloomberg. From Mid-2014 onwards, 
+it seems that the fluctuations of Bitcoin have become milder and continue to look 
+this way up to the present. 
+
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 
+gold<- Quandl("WGC/GOLD_DAILY_USD", start_date="2010-07-17") %>% 
+  tbl_df()
+
+
+bitcoin_gold <- 
+  left_join(bitcoin, gold, by="Date") %>%  
+  select (Date, `24h Average`, Value)
+
+q4 <- 
+  ggplot(bitcoin_gold, aes(Date)) + 
+  geom_line(aes(y = `24h Average`, colour = "Bitcoin")) + 
+  geom_line(aes(y = Value, colour = "Gold"))+ 
+  labs(x="Year", 
+       y="Average Price Per Day", 
+       title="Price Volatility of Gold and Bitcoin") 
+ggplotly(q4)
 ```
-
-
-
-
 
 ## Question 5:
 
