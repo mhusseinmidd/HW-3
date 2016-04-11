@@ -13,7 +13,7 @@ suppressPackageStartupMessages(library(plotly))
 suppressPackageStartupMessages(library(pander))
 suppressPackageStartupMessages(library(plyr))
 suppressPackageStartupMessages(library(knitr))
-
+suppressPackageStartupMessages(library(ROCR))
 ```
 
 
@@ -215,12 +215,18 @@ pander (logistic_model, covariate.labels =c("Age", 'Some College',
                                             'Logged Income'))
 ```
 
-The results of our regression model show that age is a statistically significant predictor of sex. A one year increase in age, on average, is associated with a 1.021 increase in the odds of being female. Conversely, having only some college education, compared to having a Bachelor's, decreases the odds of being female by 0.802. Ideally. we would be able to see the condifence interval for these predictions, but the code breaks down. 
+The results of our regression model show that age is a statistically significant predictor of sex. A one year increase in age, on average, is associated with a 1.021 increase in the odds of being female. This age logged odds estimate (0.0212) lies witin a 95% confidence interval that streches from 0.0142	to 0.0281. Conversely, having only some college education, compared to having a Bachelor's, is associated with a decrease in the odds of being female by 0.802 and its logged odds ratio falls within a confidence interval of [-0.396,	-0.0438]. 
 
 ```{r, echo=FALSE, warning=FALSE, fig.width=12, fig.height=6}
-# Have to fix this somehow ... 
-# ci_logistic_model <-confint (logistic_model)
-# pander (ci_logistic_model)
+ci_logistic_model <-confint.default(logistic_model)
+row.names(ci_logistic_model)<-c("Intercept", "Age", 
+                              'Some College', 
+                              'Graduate/ Professional Degree',
+                              'Space Camp', 'Atheltic', 'Curvey', 
+                              'Fit', 'Full Figured', 'Smokes',
+                              'Drinks', 'Does Drugs', 'Height', 
+                              'Logged Income')
+pander(ci_logistic_model)
 ```
 
 ### b)
@@ -234,7 +240,7 @@ profiles <- profiles %>%
 
 hist(fitted(logistic_model))
 ```
-
+This histogram shows the distribution of the fitted probabilitys $\widehat{p}_i$ for users in the okcupid dataset. Given the model specififcation chosen above, notice that the total number of observation drops from 59,946 to 8,879. 
 ### c)
 
 Use a *decision threshold* of $p^*=0.5$ to make an explicit prediction for each
@@ -247,7 +253,7 @@ Display a 2 x 2 contigency table of `sex` and `predicted_sex` i.e. compare the
 predicted sex to the actual sex of all users. The sum of all the elements in
 your table should be $n=59946$. Comment on how well our predictions fared.
 
-The contingency table below displays predicted and actual sexes of Okcupid users in the Bay Area. Overall, our model seems to have fared quite well. Of the 6,742  males in our sample, we were able to predict accuratley the sex of 6,043. That is, our model correctly predicted the gender of males 90% of the time. As for females, the model predicted correctly their sex 83.7% of the time. Combined, our model made correct predictions 88.3% of the time regarding an Okcupid user's sex. 
+The contingency table below displays predicted and actual sexes of Okcupid users in the Bay Area. Overall, our model seems to have fared well. Of the 6,742  males in our sample, we were able to predict accuratley the sex of 6,043. That is, our model correctly predicted the gender of males 90% of the time. As for females, the model predicted correctly their sex 83.7% of the time. Combined, our model made correct predictions 88.3% of the time regarding an Okcupid user's sex. As mentioned above, the total number of users is less than the expected $n=59946$, since regression models drop users for whom no information on a certain variable is available. 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
 profiles <- profiles %>% 
   mutate (predicted_sex_logodds=predict(logistic_model), 
@@ -260,7 +266,7 @@ profiles <- profiles %>%
           
           predicted_sex_prob=predicted_sex_odds/(1+predicted_sex_odds), 
           
-          #We have the probability that someone is female based on our model. Now, we incorporate the threshold: 
+          #We have the probability that someone is female based on our model. Now,            we incorporate the threshold: 
           
           predicted_sex=ifelse(predicted_sex_prob>=0.5, 1, 0)
           )
@@ -282,9 +288,15 @@ Say we wanted to have a **false positive rate** of about 20%, i.e. of the people
 we predicted to be female, we want to be wrong no more than 20% of the time. What
 decision threshold $p^*$ should we use?
 
-False positive refers to instances of falsely rejecting the null hypothesis. In this case, it refers to predicting that a user is female when in fact they are male. As it currently stands, the model has a false positive rate of 17.3% only. In general, however, if we wanted to adjust a threshold tp get such a rate, I have no idea what we should do ... (need to think more about this) 
+False positive refers to instances of falsely rejecting the null hypothesis. In this case, it refers to predicting that a user is female when in fact they are male. As it currently stands, the model has a false positive rate of 17.3% only. In any case, to determine the best theshold for our model, we draw a Receiver Operating Characteristic Curve (ROC). 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
+#Create a prediction variable: 
+pred<-prediction(profiles$predicted_sex_prob, profiles$predicted_sex)
+roc.perf <- performance(pred, measure='tpr', x.measure='fpr')
+plot (roc.perf)
+abline(a=0, b= 1)
 ```
+Professor, I am unclear on how to interpret this graph. It seems too far away from the diagonal line ($x=y$). What are your thoughts? 
 
 ## Question 2:
 
@@ -306,21 +318,24 @@ time_series <-
   mutate (date_fixed=parse_date_time(date_time, '%m %d %h:%m:%s %y'), 
           week=floor_date(date_fixed, "week")
   ) %>% 
-group_by(week) %>% 
+  group_by(week) %>% 
   tally()
 
-ggplot(time_series, aes(x=week, y=n)) + 
+mean_time_series <-
+  time_series %>% 
+  summarise(mean_n=mean(n))
+  
+q2 <- 
+  ggplot(time_series, aes(x=week, y=n)) + 
   geom_line() + 
   labs(x="Week of Year", 
       y="Total Number of Played Songs",
-      title="Number of Played Songs per Week")
+      title="Number of Played Songs per Week")+
+  geom_hline(yintercept=827, color='red')
+ggplotly(q2)
 ```
 
-Looking at the graph, it seems that the beginning and end of every year witnesses
-a considerable increase in the total number of songs played per week at Reed's 
-college. This pattern is expected, since there are presuemably fewer students 
-in the summer and during winter break, when the number of songs played is lowest, 
-compared to the academic year which spans from September to May.   
+This graph displays the total number of songs played on the juke box for every week of the years 2004-2009 at Reed College's pool hall. On average, as the red line shows, 827 songs were played per week. Looking at the graph, it seems that the begining and end of every year witnessesa considerable increase in the total number of songs played per week at Reed's college. This pattern is expected, since there are presuemably fewer students in the summer and during winter break, when the number of songs played is lowest, compared to the academic year which spans from September to May. It is unclear why the number of songs shoots up to 1,641, which is two standard deviations away from th emean of 827, in the week of 27 of January 2007. 
 
 ## Question 3:
 
@@ -344,12 +359,7 @@ graveyard <-
 pander(graveyard)
 ```
 
-The top artist played at Reed college's pool hall on the jukebox 
-between 2004 and 2009 is OutKast. The hip-hop duo beats its closest contester
-The Beatles by a considerable margin of 149. The Beatles, in turn, was played 
-132 times more than Radiohead, who came in third place, overtaking Led Zeppelin
-by merely 10 times. Eminem, who took the tenth place, can perhaps learn a lesson 
-or two from OutKast, who were played 463 times more than the contemporary rapper. 
+The top artist played at Reed college's pool hall on the jukebox between 2004 and 2009 is OutKast. The hip-hop duo beats its closest contester The Beatles by a considerable margin of 149. The Beatles, in turn, was played 132 times more than Radiohead, who came in third place, overtaking Led Zeppelin by merely 10 times. Eminem, who took the tenth place, can perhaps learn a lesson or two from OutKast, who were played 463 times more than the contemporary rapper. 
 
 ## Question 4:
 
@@ -374,10 +384,8 @@ it seems that the fluctuations of Bitcoin have become milder and continue to loo
 this way up to the present. 
 
 ```{r, echo=FALSE, fig.width=12, fig.height=6}
-
 gold<- Quandl("WGC/GOLD_DAILY_USD", start_date="2010-07-17") %>% 
   tbl_df()
-
 
 bitcoin_gold <- 
   left_join(bitcoin, gold, by="Date") %>%  
@@ -390,8 +398,31 @@ q4 <-
   labs(x="Year", 
        y="Average Price Per Day", 
        title="Price Volatility of Gold and Bitcoin") 
+
 ggplotly(q4)
+
 ```
+We can do better by defining volatility as the relative change in price between one day and the previous day. Plotting the volatility for Bitcoin and gold, we get: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6}
+bitcoin_gold <- bitcoin_gold %>% 
+  arrange (Date) %>% 
+  mutate (bitcoin_volatility = `24h Average` - lag(`24h Average`),
+          default=first(`24h Average`), 
+          gold_volatility=Value-lag(Value), default=first(Value)
+          )
+q4_volt<- 
+  ggplot(bitcoin_gold, aes(Date)) + 
+  geom_line(aes(y = bitcoin_volatility, colour = "Bitcoin")) + 
+  geom_line(aes(y = gold_volatility, colour = "Gold"))+ 
+  labs(x="Year", 
+       y="Price Volatility", 
+       title="Price Volatility of Gold and Bitcoin") 
+
+ggplotly(q4_volt)
+```
+
+This graph shows Gold to be a consistent currency in its volatility, restricted by a band of about 50% difference in either direction from the day before. Bitcoin, however, seems to have faced much greater volatility, especially in 2014, where the were offshoots of more than 300% in the negative direction and 150% in the positive direction of the percentage change in price from the day before. It does seem that the relative change is converging to a narrower band, from March 2014 onwards. 
 
 ## Question 5:
 
@@ -401,10 +432,20 @@ comparing cheese and milk production in the US from 1930 to today. Comment on th
 * Cheese [page](https://www.quandl.com/data/USDANASS/NASS_CHEESEPRODUCTIONMEASUREDINLB-Cheese-Production-Measured-In-Lb)
 * Milk [page](https://www.quandl.com/data/USDANASS/NASS_MILKPRODUCTIONMEASUREDINLB-Milk-Production-Measured-In-Lb)
 
-```{r, echo=FALSE, fig.width=12, fig.height=6}
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
 cheese <- Quandl("USDANASS/NASS_CHEESEPRODUCTIONMEASUREDINLB") %>% 
   tbl_df()
 milk <-  Quandl("USDANASS/NASS_MILKPRODUCTIONMEASUREDINLB") %>% 
   tbl_df()
+
+milk_cheese <- left_join(cheese, milk, by="Date") 
+
+  ggplot(milk_cheese, aes(Date)) + 
+  geom_line(aes(y = Value.x, colour = "Cheese")) + 
+  geom_line(aes(y = Value.y, colour = "Milk"))+ 
+  labs(x="Year", 
+       y="Cheese and Milk Production (LB)", 
+       title="Cheese and Milk Production by Year") 
 ```
 
+It seems that, while Milk production has soared since the 1980s, cheese production has only witnessed a very mild rise in production. The steep rise in milk production may be explained by the demand for milk is driven by more than direct consumer consumption. Cheese, for instance, depends on milk. Hence, the smaller upward trend in cheese may be driving part of the increase in milk production. Afterall, to produce one pound of a cheese like Cheddar, one needs at least 10 pounds of milk (which is a werid metric for measuring milk but guarantees that our axes are the same for two distinct variables).
