@@ -5,13 +5,13 @@ output: html_document
 ---
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
+suppressPackageStartupMessages(library(plyr))
 suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(lubridate))
 suppressPackageStartupMessages(library(Quandl))
 suppressPackageStartupMessages(library(plotly))
 suppressPackageStartupMessages(library(pander))
-suppressPackageStartupMessages(library(plyr))
 suppressPackageStartupMessages(library(knitr))
 suppressPackageStartupMessages(library(ROCR))
 ```
@@ -215,7 +215,7 @@ pander (logistic_model, covariate.labels =c("Age", 'Some College',
                                             'Logged Income'))
 ```
 
-The results of our regression model show that age is a statistically significant predictor of sex. A one year increase in age, on average, is associated with a 1.021 increase in the odds of being female. This age logged odds estimate (0.0212) lies witin a 95% confidence interval that streches from 0.0142	to 0.0281. Conversely, having only some college education, compared to having a Bachelor's, is associated with a decrease in the odds of being female by 0.802 and its logged odds ratio falls within a confidence interval of [-0.396,	-0.0438]. 
+The results of our regression model show that age is a statistically significant predictor of sex. A one year increase in age, on average, is associated with a 1.021 multiplicative increase in the odds of being female, cetris paribus. This age logged odds estimate (0.0212) lies witin a 95% confidence interval that streches from 0.0142	to 0.0281. Conversely, having only some college education, compared to having a Bachelor's, is associated with a decrease in the odds of being female by 0.802 and its logged odds ratio falls within a confidence interval of [-0.396,	-0.0438]. Surprisingly, smoking does not look signififcant, while drinking is associated with an increase in the odds of being female (!)
 
 ```{r, echo=FALSE, warning=FALSE, fig.width=12, fig.height=6}
 ci_logistic_model <-confint.default(logistic_model)
@@ -349,7 +349,25 @@ shift" during the academic year? Define
 graveyard <- 
   jukebox %>% 
   mutate (date_fixed=parse_date_time(date_time, '%m %d %h:%m:%s %y')) %>% 
-  filter(month(date_fixed)>=05 & month(date_fixed)<=09) %>% 
+  filter(month(date_fixed)<=05|month(date_fixed)>=09) %>%
+  filter (hour(date_fixed)>=00 & hour(date_fixed)<=08) %>%  
+  group_by(artist) %>% 
+  tally() %>%
+  arrange (desc(n)) %>% 
+  slice (1:10)
+
+pander(graveyard)
+```
+The top artist played at Reed college's pool hall on the jukebox between 2004 and 2009 during the graveyard shift in the academic year is OutKast. The hip-hop duo beats its closest contester The Beatles by a considerable margin of 399 The Beatles, in turn, was played 643 times more than Led Zeppelin, who came in third place, overtaking Radiohead by merely 81 times. The Talking Heads, who took the tenth place, can perhaps learn a lesson or two from OutKast, who were played 1604 times more than this 70s and 80s rock band.  
+
+
+Let's look at what the graveyard shift looks like during the summer for comparison purposes: 
+
+```{r, echo=FALSE, fig.width=12, fig.height=6}
+graveyard <- 
+  jukebox %>% 
+  mutate (date_fixed=parse_date_time(date_time, '%m %d %h:%m:%s %y')) %>% 
+  filter(month(date_fixed)>=05&month(date_fixed)<=09) %>%
   filter (hour(date_fixed)>=00 & hour(date_fixed)<=08) %>%  
   group_by(artist) %>% 
   tally() %>%
@@ -359,9 +377,10 @@ graveyard <-
 pander(graveyard)
 ```
 
-The top artist played at Reed college's pool hall on the jukebox between 2004 and 2009 is OutKast. The hip-hop duo beats its closest contester The Beatles by a considerable margin of 149. The Beatles, in turn, was played 132 times more than Radiohead, who came in third place, overtaking Led Zeppelin by merely 10 times. Eminem, who took the tenth place, can perhaps learn a lesson or two from OutKast, who were played 463 times more than the contemporary rapper. 
+We see that the pattern is largely the same, with a few shifts around. The top artist remains OutKast, although it is played less frequently. The hip-hop duo beats its closest contester The Beatles by a  margin of 149. The Beatles, in turn, were played 132 times more than Radiohead, who switched positions coming in third place and overtaking Led Zeppelin by merely 10 times. Eminem lost ground to THe Red Hot Chili Peppers, Michael Jackson, and the Talking Heads, coming in tenth with  463 plays between the contemporary rapper and OutKast, the overall winner. 
 
-## Question 4:
+
+## Question
 
 We want to compare the volatility of 
 
@@ -424,6 +443,27 @@ ggplotly(q4_volt)
 
 This graph shows Gold to be a consistent currency in its volatility, restricted by a band of about 50% difference in either direction from the day before. Bitcoin, however, seems to have faced much greater volatility, especially in 2014, where the were offshoots of more than 300% in the negative direction and 150% in the positive direction of the percentage change in price from the day before. It does seem that the relative change is converging to a narrower band, from March 2014 onwards. 
 
+Even better would be to rescale the magintude of the difference. 
+```{r, echo=FALSE, fig.width=12, fig.height=6}
+bitcoin_gold <- 
+  bitcoin_gold %>% 
+  arrange (Date) %>% 
+  mutate (bitcoin_volatility = (`24h Average` - lag(`24h Average`))/lag(`24h Average`),
+          default=first(`24h Average`), 
+          gold_volatility=(Value-lag(Value))/lag(Value), default=first(Value)
+          )
+q4_volt_rescaled<- 
+  ggplot(bitcoin_gold, aes(Date)) + 
+  geom_line(aes(y = bitcoin_volatility, colour = "Bitcoin")) + 
+  geom_line(aes(y = gold_volatility, colour = "Gold"))+ 
+  labs(x="Year", 
+       y="Price Volatility", 
+       title="Price Volatility of Gold and Bitcoin") 
+
+ggplotly(q4_volt_rescaled)
+```
+This graph drives the point home. Gold is condiserably less volatile compared to bitcoin, across the board. It also confirms our earlier suspicion that the volatility of Bitcoin has been decreasing over time. 
+
 ## Question 5:
 
 Using the data loaded from Quandl below, plot a time series using `geom_line()`
@@ -449,3 +489,26 @@ milk_cheese <- left_join(cheese, milk, by="Date")
 ```
 
 It seems that, while Milk production has soared since the 1980s, cheese production has only witnessed a very mild rise in production. The steep rise in milk production may be explained by the demand for milk is driven by more than direct consumer consumption. Cheese, for instance, depends on milk. Hence, the smaller upward trend in cheese may be driving part of the increase in milk production. Afterall, to produce one pound of a cheese like Cheddar, one needs at least 10 pounds of milk (which is a werid metric for measuring milk but guarantees that our axes are the same for two distinct variables).
+
+To make the comparison fairer, let's consider the percentage change in milk and cheese production, relative to the first year we have information on both industries, which is 1924. Effectively, we are creating an index: 
+```{r, echo=FALSE, fig.width=12, fig.height=6, warning=FALSE}
+
+milk_cheese <- left_join(cheese, milk, by="Date") 
+milk_cheese_change <- 
+  milk_cheese %>% 
+  arrange (Date) %>% 
+  mutate (Value.x = (((Value.x - (Value.x)[6]))/(Value.x)[6]),
+          # default=first(Value.x), 
+          Value.y = (((Value.y - (Value.y)[6]))/(Value.y)[6])
+          )
+
+  ggplot(milk_cheese_change, aes(Date)) + 
+  geom_line(aes(y = Value.x, colour = "Cheese")) + 
+  geom_line(aes(y = Value.y, colour = "Milk"))+ 
+  labs(x="Year", 
+       y="Change from 1924 Production", 
+       title="Cheese and Milk Production Change by Year") 
+```
+
+The trends switch. While before, the naive graph made it seem as if Milk was growing at a faster rate than cheese, it is now evident that cheese is growing quite rapidly. This trend was masked by the sheer size of Milk. It is more difficult to sustain high levels of growth when you are already so big as an industry. Wheras cheese seems to be taking off, especially in the 90s and 2000s.
+Note: The y-axis should be understood as how many times is the industry compared to its level in 1924. In case of cheese in 2000, for instance, we would say that production level 15 times larger than production level in 1924. For Milk, it would be 3 times as large. 
